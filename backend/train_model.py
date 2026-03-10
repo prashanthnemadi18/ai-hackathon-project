@@ -110,7 +110,7 @@ model.summary()
 # Callbacks
 callbacks = [
     ModelCheckpoint(MODEL_PATH, save_best_only=True, monitor="val_accuracy", verbose=1),
-    EarlyStopping(patience=5, restore_best_weights=True, monitor="val_accuracy"),
+    # EarlyStopping removed - training will run for full 20 epochs
     ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-6, monitor="val_loss"),
 ]
 

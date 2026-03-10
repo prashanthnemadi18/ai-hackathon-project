@@ -247,38 +247,81 @@ def preprocess_image(img_path):
 
 
 def get_weather(city: str):
-    if not OPENWEATHER_API_KEY:
+    """Get weather data from Open-Meteo (free, no API key needed)"""
+    try:
+        # First, get coordinates from city name
+        geocoding_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
+        geo_response = requests.get(geocoding_url, timeout=5)
+        geo_data = geo_response.json()
+        
+        if not geo_data.get('results'):
+            return {
+                "city": city,
+                "temperature": "N/A",
+                "humidity": "N/A",
+                "wind_speed": "N/A",
+                "description": "City not found",
+                "icon": "01d",
+            }
+        
+        location = geo_data['results'][0]
+        latitude = location['latitude']
+        longitude = location['longitude']
+        
+        # Get weather data
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto"
+        weather_response = requests.get(weather_url, timeout=5)
+        weather_data = weather_response.json()
+        
+        current = weather_data['current']
+        
+        # Map weather codes to descriptions
+        weather_codes = {
+            0: "Clear sky",
+            1: "Mainly clear",
+            2: "Partly cloudy",
+            3: "Overcast",
+            45: "Foggy",
+            48: "Foggy",
+            51: "Light drizzle",
+            53: "Moderate drizzle",
+            55: "Dense drizzle",
+            61: "Slight rain",
+            63: "Moderate rain",
+            65: "Heavy rain",
+            71: "Slight snow",
+            73: "Moderate snow",
+            75: "Heavy snow",
+            80: "Slight rain showers",
+            81: "Moderate rain showers",
+            82: "Violent rain showers",
+            85: "Slight snow showers",
+            86: "Heavy snow showers",
+            95: "Thunderstorm",
+            96: "Thunderstorm with hail",
+            99: "Thunderstorm with hail",
+        }
+        
+        description = weather_codes.get(current['weather_code'], "Unknown")
+        
+        return {
+            "city": f"{location['name']}, {location.get('country', '')}",
+            "temperature": round(current['temperature_2m'], 1),
+            "humidity": current['relative_humidity_2m'],
+            "wind_speed": round(current['wind_speed_10m'], 1),
+            "description": description,
+            "icon": "01d",
+        }
+    except Exception as e:
+        logger.error(f"Weather API error: {e}")
         return {
             "city": city,
             "temperature": "N/A",
             "humidity": "N/A",
             "wind_speed": "N/A",
-            "description": "Weather API key not configured",
+            "description": "Could not fetch weather data",
             "icon": "01d",
         }
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-        resp = requests.get(url, timeout=5)
-        data = resp.json()
-        if resp.status_code == 200:
-            return {
-                "city": data["name"],
-                "temperature": round(data["main"]["temp"], 1),
-                "humidity": data["main"]["humidity"],
-                "wind_speed": data["wind"]["speed"],
-                "description": data["weather"][0]["description"].title(),
-                "icon": data["weather"][0]["icon"],
-            }
-    except Exception as e:
-        print(f"Weather API error: {e}")
-    return {
-        "city": city,
-        "temperature": "N/A",
-        "humidity": "N/A",
-        "wind_speed": "N/A",
-        "description": "Could not fetch weather data",
-        "icon": "01d",
-    }
 
 
 def predict_disease(img_path):
