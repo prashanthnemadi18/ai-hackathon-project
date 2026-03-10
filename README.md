@@ -2,6 +2,14 @@
 
 AI-powered crop disease detection using CNN with real-time weather integration.
 
+## � Project Overview
+
+Crop diseases are a major challenge in agriculture, causing 20–40% crop loss worldwide every year. AgroGuard AI provides an intelligent solution by combining:
+
+- Deep Learning for plant disease detection
+- Computer Vision for leaf image analysis
+- Weather data analysis for disease risk prediction
+
 ## 📁 Project Structure
 
 ```
@@ -12,7 +20,7 @@ AgroGuard-AI/
 │   └── js/main.js
 │
 ├── backend/               # Backend (Flask API)
-│   ├── app.py            # Main Flask application
+│   ├── app.py            # Main Flask application (Production-ready)
 │   ├── train_model.py    # CNN training script
 │   ├── prepare_dataset.py # Dataset preparation
 │   ├── requirements.txt
@@ -74,18 +82,39 @@ export OPENWEATHER_API_KEY=your_key_here
 ## 🦠 Supported Diseases
 
 - Pepper Bell: Bacterial Spot, Healthy
-- (Expandable to Tomato, Potato, Corn, Grape)
+- Potato: Early Blight, Late Blight, Healthy
+- Tomato: Early Blight, Late Blight, Bacterial Spot, Leaf Mold, Septoria Leaf Spot, Target Spot, Mosaic Virus, Yellow Leaf Curl Virus, Spider Mites, Healthy
 
 ## 🛠️ Tech Stack
 
 - Frontend: HTML5, CSS3, Vanilla JavaScript
 - Backend: Flask, TensorFlow/Keras
-- Model: CNN (Convolutional Neural Network)
+- Model: CNN (Convolutional Neural Network) - Production-optimized
 - Dataset: PlantVillage
+- API: OpenWeatherMap for real-time weather data
 
 ## 📝 API Endpoints
 
 - `GET /api/health` - Check server status
 - `POST /api/predict` - Analyze crop image
+
+## ⭐ Key Features
+
+- 🌿 AI Crop Disease Detection using CNN
+- 📷 Image upload and analysis
+- � Disease prediction with confidence scores
+- 🌦️ Weather-based disease risk analysis
+- 💊 Treatment recommendations
+- 🔒 Production-ready error handling
+- ⚡ High-traffic support with thread-safe model access
+
+## 🌍 Impact
+
+AgroGuard AI helps:
+
+- Farmers detect diseases early
+- Reduce crop losses
+- Improve agricultural productivity
+- Promote AI-based smart farming solutions
 
 Built with ❤️ for farmers
