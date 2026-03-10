@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, Upload, LogOut, Cloud, Droplets, Wind, Cloud as CloudRain, Download, BarChart3, Leaf } from 'lucide-react'
+import { Camera, Upload, LogOut, Cloud, Droplets, Wind, Cloud as CloudRain, Download, BarChart3, Leaf, Mic } from 'lucide-react'
 import axios from 'axios'
 import jsPDF from 'jspdf'
 import WeatherCard from '../components/WeatherCard'
 import PredictionCard from '../components/PredictionCard'
 import AnalyticsChart from '../components/AnalyticsChart'
+import VoiceAssistant from '../components/VoiceAssistant'
 
 export default function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('detect')
@@ -20,6 +21,40 @@ export default function Dashboard({ user, onLogout }) {
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
   const navigate = useNavigate()
+
+  // Voice location capture
+  const captureLocationVoice = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = false
+      recognition.interimResults = false
+      recognition.lang = 'en-US'
+
+      recognition.onstart = () => {
+        console.log('Listening for location...')
+      }
+
+      recognition.onresult = (event) => {
+        let transcript = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript
+        }
+        if (transcript) {
+          setCity(transcript.trim())
+          // Speak confirmation
+          const utterance = new SpeechSynthesisUtterance(`Location set to ${transcript}`)
+          window.speechSynthesis.speak(utterance)
+        }
+      }
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error', event.error)
+      }
+
+      recognition.start()
+    }
+  }
 
   // Auto-detect location on mount
   useEffect(() => {
@@ -68,34 +103,20 @@ export default function Dashboard({ user, onLogout }) {
       formData.append('image', file)
       formData.append('city', city)
 
-      // Try both localhost and direct IP
-      const endpoints = [
-        'http://localhost:5000/api/predict',
-        'http://127.0.0.1:5000/api/predict'
-      ]
+      // Get API URL from environment or use default
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+      const endpoint = `${apiUrl}/api/predict`
 
-      let response = null
-      for (const endpoint of endpoints) {
-        try {
-          response = await axios.post(endpoint, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 10000
-          })
-          break
-        } catch (error) {
-          continue
-        }
-      }
-
-      if (!response) {
-        throw new Error('Backend not responding')
-      }
+      const response = await axios.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000
+      })
 
       setPrediction(response.data)
       setWeather(response.data.weather)
     } catch (error) {
       console.error('Prediction error:', error)
-      alert('Error: Make sure backend is running on port 5000\nRun: python app.py in backend folder')
+      alert('Error connecting to backend. Please check:\n1. Backend is deployed and running\n2. API URL is correct\n3. CORS is enabled')
     }
     setLoading(false)
   }
@@ -133,7 +154,7 @@ export default function Dashboard({ user, onLogout }) {
     }
   }
 
-  // Generate PDF report
+  // Generate Professional PDF Report
   const generatePDF = () => {
     if (!prediction) return
 
@@ -142,76 +163,155 @@ export default function Dashboard({ user, onLogout }) {
     const pageHeight = doc.internal.pageSize.getHeight()
     let yPosition = 20
 
-    // Header
-    doc.setFillColor(16, 185, 129)
-    doc.rect(0, 0, pageWidth, 40, 'F')
+    // Color scheme
+    const primaryColor = [5, 150, 105] // #059669
+    const darkColor = [31, 41, 55] // #1f2937
+    const lightGray = [249, 250, 251] // #f9fafb
+
+    // Header with background
+    doc.setFillColor(...primaryColor)
+    doc.rect(0, 0, pageWidth, 50, 'F')
+    
+    // Logo and title
     doc.setTextColor(255, 255, 255)
-    doc.setFontSize(24)
-    doc.text('AgroGuard AI Report', pageWidth / 2, 25, { align: 'center' })
+    doc.setFontSize(28)
+    doc.setFont(undefined, 'bold')
+    doc.text('AgroGuard AI', 20, 25)
+    doc.setFontSize(10)
+    doc.setFont(undefined, 'normal')
+    doc.text('Smart Crop Disease Detection Report', 20, 35)
+    
+    // Report date
+    doc.setFontSize(9)
+    doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - 20, 25, { align: 'right' })
 
-    // Reset text color
-    doc.setTextColor(0, 0, 0)
-    yPosition = 50
+    yPosition = 60
 
-    // Disease Information
+    // Disease Detection Section
+    doc.setTextColor(...darkColor)
     doc.setFontSize(14)
     doc.setFont(undefined, 'bold')
     doc.text('Disease Detection Results', 20, yPosition)
     yPosition += 10
 
+    // Background for results
+    doc.setFillColor(...lightGray)
+    doc.rect(15, yPosition - 5, pageWidth - 30, 35, 'F')
+
     doc.setFontSize(11)
     doc.setFont(undefined, 'normal')
-    doc.text(`Disease: ${prediction.disease}`, 20, yPosition)
+    doc.setTextColor(...darkColor)
+    
+    doc.text(`Disease: ${prediction.disease.replace(/_/g, ' ')}`, 20, yPosition)
     yPosition += 7
     doc.text(`Confidence: ${prediction.confidence}%`, 20, yPosition)
     yPosition += 7
     doc.text(`Severity: ${prediction.severity}`, 20, yPosition)
-    yPosition += 10
+    yPosition += 7
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, yPosition)
+    
+    yPosition += 15
 
-    // Description
+    // Description Section
     doc.setFont(undefined, 'bold')
-    doc.text('Description:', 20, yPosition)
-    yPosition += 5
+    doc.setFontSize(12)
+    doc.text('Description', 20, yPosition)
+    yPosition += 6
+
     doc.setFont(undefined, 'normal')
+    doc.setFontSize(10)
     const descLines = doc.splitTextToSize(prediction.description, pageWidth - 40)
     doc.text(descLines, 20, yPosition)
     yPosition += descLines.length * 5 + 5
 
-    // Symptoms
+    // Symptoms Section
     doc.setFont(undefined, 'bold')
-    doc.text('Symptoms:', 20, yPosition)
-    yPosition += 5
+    doc.setFontSize(12)
+    doc.text('Symptoms', 20, yPosition)
+    yPosition += 6
+
     doc.setFont(undefined, 'normal')
+    doc.setFontSize(10)
     const symptomLines = doc.splitTextToSize(prediction.symptoms, pageWidth - 40)
     doc.text(symptomLines, 20, yPosition)
-    yPosition += symptomLines.length * 5 + 5
+    yPosition += symptomLines.length * 5 + 8
 
-    // Treatment
+    // Treatment Section
     doc.setFont(undefined, 'bold')
-    doc.text('Treatment Recommendations:', 20, yPosition)
-    yPosition += 5
+    doc.setFontSize(12)
+    doc.text('Treatment Recommendations', 20, yPosition)
+    yPosition += 6
+
     doc.setFont(undefined, 'normal')
+    doc.setFontSize(10)
     prediction.treatment.forEach((treatment, idx) => {
-      doc.text(`${idx + 1}. ${treatment}`, 25, yPosition)
-      yPosition += 5
+      const treatmentLines = doc.splitTextToSize(`${idx + 1}. ${treatment}`, pageWidth - 40)
+      doc.text(treatmentLines, 20, yPosition)
+      yPosition += treatmentLines.length * 5
     })
+
     yPosition += 5
 
-    // Weather Information
+    // Weather Information Section
     if (weather && weather.city) {
       doc.setFont(undefined, 'bold')
-      doc.text('Weather Information:', 20, yPosition)
-      yPosition += 5
+      doc.setFontSize(12)
+      doc.text('Weather Information', 20, yPosition)
+      yPosition += 6
+
+      // Weather background
+      doc.setFillColor(...lightGray)
+      doc.rect(15, yPosition - 5, pageWidth - 30, 30, 'F')
+
       doc.setFont(undefined, 'normal')
+      doc.setFontSize(10)
       doc.text(`Location: ${weather.city}`, 20, yPosition)
-      yPosition += 5
+      yPosition += 6
       doc.text(`Temperature: ${weather.temperature}°C`, 20, yPosition)
-      yPosition += 5
+      yPosition += 6
       doc.text(`Humidity: ${weather.humidity}%`, 20, yPosition)
-      yPosition += 5
+      yPosition += 6
       doc.text(`Wind Speed: ${weather.wind_speed} m/s`, 20, yPosition)
+      yPosition += 6
+      doc.text(`Condition: ${weather.description}`, 20, yPosition)
     }
 
+    yPosition += 15
+
+    // Disease Risk Assessment
+    doc.setFont(undefined, 'bold')
+    doc.setFontSize(12)
+    doc.text('Disease Risk Assessment', 20, yPosition)
+    yPosition += 6
+
+    doc.setFont(undefined, 'normal')
+    doc.setFontSize(10)
+    
+    let riskLevel = 'Low'
+    let riskColor = [34, 197, 94] // green
+    
+    if (weather && weather.humidity > 80) {
+      riskLevel = 'High'
+      riskColor = [239, 68, 68] // red
+    } else if (weather && weather.humidity > 60) {
+      riskLevel = 'Medium'
+      riskColor = [251, 146, 60] // orange
+    }
+
+    doc.setFillColor(...riskColor)
+    doc.rect(15, yPosition - 5, pageWidth - 30, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont(undefined, 'bold')
+    doc.text(`Risk Level: ${riskLevel}`, 20, yPosition + 2)
+
+    yPosition += 20
+
+    // Footer
+    doc.setTextColor(150, 150, 150)
+    doc.setFontSize(8)
+    doc.text('This report is generated by AgroGuard AI. Please consult with agricultural experts for critical decisions.', 20, pageHeight - 15, { maxWidth: pageWidth - 40 })
+
+    // Save PDF
     doc.save(`AgroGuard_Report_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
@@ -224,24 +324,37 @@ export default function Dashboard({ user, onLogout }) {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
       {/* Header */}
       <motion.header 
-        className="bg-white shadow-md sticky top-0 z-40"
+        className="bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg sticky top-0 z-40"
         initial={{ y: -100 }}
         animate={{ y: 0 }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Leaf className="w-8 h-8 text-green-600" />
-            <h1 className="text-2xl font-bold text-gray-900">AgroGuard AI</h1>
-          </div>
+          <motion.div 
+            className="flex items-center gap-3"
+            whileHover={{ scale: 1.05 }}
+          >
+            <div className="p-2 bg-white/20 rounded-lg">
+              <Leaf className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">AgroGuard AI</h1>
+              <p className="text-green-100 text-xs">Smart Crop Disease Detection</p>
+            </div>
+          </motion.div>
           <div className="flex items-center gap-4">
-            <span className="text-gray-600">Welcome, <span className="font-semibold">{user?.name}</span></span>
-            <button
+            <div className="text-right">
+              <p className="text-white font-semibold">{user?.name}</p>
+              <p className="text-green-100 text-xs">Farmer Account</p>
+            </div>
+            <motion.button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition font-semibold border border-white/30"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <LogOut className="w-4 h-4" />
               Logout
-            </button>
+            </motion.button>
           </div>
         </div>
       </motion.header>
@@ -250,7 +363,7 @@ export default function Dashboard({ user, onLogout }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tabs */}
         <motion.div 
-          className="flex gap-4 mb-8"
+          className="flex gap-4 mb-8 bg-white rounded-xl shadow-soft p-2 border border-gray-100"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -258,18 +371,20 @@ export default function Dashboard({ user, onLogout }) {
             { id: 'detect', label: 'Disease Detection', icon: <Camera className="w-4 h-4" /> },
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> }
           ].map(tab => (
-            <button
+            <motion.button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition ${
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition flex-1 sm:flex-none ${
                 activeTab === tab.id
-                  ? 'bg-green-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
+                  : 'text-gray-700 hover:bg-gray-50'
               }`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               {tab.icon}
               {tab.label}
-            </button>
+            </motion.button>
           ))}
         </motion.div>
 
@@ -284,90 +399,131 @@ export default function Dashboard({ user, onLogout }) {
             <div className="lg:col-span-2 space-y-6">
               {/* Image Upload Card */}
               <motion.div
-                className="bg-white rounded-2xl shadow-lg p-8"
-                whileHover={{ shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                className="bg-white rounded-2xl shadow-soft hover:shadow-lg transition border border-gray-100 overflow-hidden"
+                whileHover={{ y: -4 }}
               >
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Upload Crop Image</h2>
-
-                {/* Upload Area */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-green-300 rounded-xl p-12 text-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition"
-                >
-                  <Upload className="w-12 h-12 text-green-600 mx-auto mb-4" />
-                  <p className="text-gray-700 font-semibold mb-2">Click to upload or drag and drop</p>
-                  <p className="text-gray-500 text-sm">PNG, JPG, JPEG, WEBP (max 16MB)</p>
+                {/* Header */}
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
+                  <h2 className="text-2xl font-bold flex items-center gap-2">
+                    <Camera className="w-6 h-6" />
+                    Upload Crop Image
+                  </h2>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                  className="hidden"
-                />
 
-                {/* Camera Button */}
-                <button
-                  onClick={startCamera}
-                  className="w-full mt-4 flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-                >
-                  <Camera className="w-5 h-5" />
-                  Use Camera
-                </button>
-
-                {/* Camera View */}
-                {cameraActive && (
+                {/* Content */}
+                <div className="p-8 space-y-6">
+                  {/* Upload Area */}
                   <motion.div
-                    className="mt-6 space-y-4"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-green-300 rounded-xl p-12 text-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition bg-gradient-to-br from-green-50 to-emerald-50"
+                    whileHover={{ scale: 1.02 }}
                   >
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full rounded-lg"
-                    />
-                    <canvas ref={canvasRef} className="hidden" width={640} height={480} />
-                    <div className="flex gap-4">
-                      <button
-                        onClick={capturePhoto}
-                        className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-                      >
-                        Capture
-                      </button>
-                      <button
-                        onClick={stopCamera}
-                        className="flex-1 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <motion.div
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <Upload className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                    </motion.div>
+                    <p className="text-gray-700 font-semibold mb-2 text-lg">Click to upload or drag and drop</p>
+                    <p className="text-gray-600 text-sm">PNG, JPG, JPEG, WEBP (max 16MB)</p>
                   </motion.div>
-                )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                    className="hidden"
+                  />
 
-                {/* Preview */}
-                {image && !cameraActive && (
-                  <motion.div
-                    className="mt-6"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                  {/* Camera Button */}
+                  <motion.button
+                    onClick={startCamera}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:shadow-lg transition font-semibold"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
-                    <img src={image} alt="Preview" className="w-full rounded-lg" />
-                  </motion.div>
-                )}
+                    <Camera className="w-5 h-5" />
+                    Use Camera
+                  </motion.button>
+
+                  {/* Camera View */}
+                  {cameraActive && (
+                    <motion.div
+                      className="space-y-4"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full rounded-lg border-2 border-green-300"
+                      />
+                      <canvas ref={canvasRef} className="hidden" width={640} height={480} />
+                      <div className="flex gap-4">
+                        <motion.button
+                          onClick={capturePhoto}
+                          className="flex-1 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:shadow-lg transition font-semibold"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          Capture
+                        </motion.button>
+                        <motion.button
+                          onClick={stopCamera}
+                          className="flex-1 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          Cancel
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Preview */}
+                  {image && !cameraActive && (
+                    <motion.div
+                      className="rounded-lg overflow-hidden border-2 border-green-300"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <img src={image} alt="Preview" className="w-full" />
+                    </motion.div>
+                  )}
+                </div>
               </motion.div>
 
               {/* Location Input */}
-              <motion.div className="bg-white rounded-2xl shadow-lg p-8">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Location</h3>
-                <input
-                  type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="Enter city name"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+              <motion.div className="bg-white rounded-2xl shadow-soft hover:shadow-lg transition border border-gray-100 overflow-hidden">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+                  <h3 className="text-lg font-bold">Location Settings</h3>
+                </div>
+
+                {/* Content */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Enter or speak your location</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Enter city name or use voice"
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                    />
+                    <motion.button
+                      onClick={() => captureLocationVoice()}
+                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition flex items-center gap-2 font-semibold"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <Mic className="w-5 h-5" />
+                      Voice
+                    </motion.button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-3">📍 Auto-detected from your device location</p>
+                </div>
               </motion.div>
             </div>
 
@@ -397,7 +553,7 @@ export default function Dashboard({ user, onLogout }) {
               {prediction && (
                 <motion.button
                   onClick={generatePDF}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:shadow-lg transition font-semibold"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:shadow-lg transition font-semibold border border-green-700"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -409,11 +565,19 @@ export default function Dashboard({ user, onLogout }) {
               {/* Loading */}
               {loading && (
                 <motion.div
-                  className="bg-blue-50 rounded-lg p-6 text-center"
+                  className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-6 text-center border border-blue-200"
                   animate={{ opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 >
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="inline-block mb-3"
+                  >
+                    <Camera className="w-8 h-8 text-blue-600" />
+                  </motion.div>
                   <p className="text-blue-900 font-semibold">Analyzing image...</p>
+                  <p className="text-blue-700 text-sm mt-1">Please wait while AI processes your crop image</p>
                 </motion.div>
               )}
             </div>
@@ -430,6 +594,9 @@ export default function Dashboard({ user, onLogout }) {
           </motion.div>
         )}
       </div>
+
+      {/* Voice Assistant */}
+      {prediction && <VoiceAssistant prediction={prediction} weather={weather} />}
     </div>
   )
 }

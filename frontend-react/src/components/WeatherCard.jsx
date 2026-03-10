@@ -1,63 +1,87 @@
 import { motion } from 'framer-motion'
-import { Cloud, Droplets, Wind, CloudRain } from 'lucide-react'
+import { Cloud, Droplets, Wind, CloudRain, Sun } from 'lucide-react'
 
 export default function WeatherCard({ weather }) {
   const getWeatherIcon = (description) => {
     const desc = description.toLowerCase()
-    if (desc.includes('rain')) return <CloudRain className="w-12 h-12 text-blue-500" />
-    if (desc.includes('cloud')) return <Cloud className="w-12 h-12 text-gray-500" />
-    return <Cloud className="w-12 h-12 text-yellow-500" />
+    if (desc.includes('rain')) return <CloudRain className="w-16 h-16 text-blue-400" />
+    if (desc.includes('cloud')) return <Cloud className="w-16 h-16 text-gray-400" />
+    if (desc.includes('clear') || desc.includes('sunny')) return <Sun className="w-16 h-16 text-yellow-400" />
+    return <Cloud className="w-16 h-16 text-gray-400" />
   }
+
+  const getRiskLevel = () => {
+    if (weather.humidity > 80) return { level: 'High Risk', color: 'from-red-500 to-red-600', bg: 'bg-red-50', text: 'text-red-700' }
+    if (weather.humidity > 60) return { level: 'Medium Risk', color: 'from-yellow-500 to-yellow-600', bg: 'bg-yellow-50', text: 'text-yellow-700' }
+    return { level: 'Low Risk', color: 'from-green-500 to-green-600', bg: 'bg-green-50', text: 'text-green-700' }
+  }
+
+  const risk = getRiskLevel()
 
   return (
     <motion.div
-      className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white"
-      whileHover={{ scale: 1.02 }}
+      className="bg-white rounded-2xl shadow-soft hover:shadow-lg transition overflow-hidden border border-gray-100"
+      whileHover={{ y: -4 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
     >
-      <h3 className="text-lg font-bold mb-4">Weather Information</h3>
-      
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-sm opacity-90">{weather.city}</p>
-          <p className="text-4xl font-bold">{weather.temperature}°C</p>
-        </div>
-        {getWeatherIcon(weather.description)}
+      {/* Header with gradient */}
+      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 text-white">
+        <h3 className="text-lg font-bold mb-2">Weather Information</h3>
+        <p className="text-blue-100 text-sm">{weather.city}</p>
       </div>
 
-      <p className="text-center mb-6 capitalize">{weather.description}</p>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between bg-white/20 rounded-lg p-3">
-          <div className="flex items-center gap-2">
-            <Droplets className="w-5 h-5" />
-            <span>Humidity</span>
+      {/* Content */}
+      <div className="p-6 space-y-6">
+        {/* Temperature and Icon */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-5xl font-bold text-gray-900">{weather.temperature}°C</p>
+            <p className="text-gray-600 capitalize mt-1">{weather.description}</p>
           </div>
-          <span className="font-semibold">{weather.humidity}%</span>
-        </div>
-
-        <div className="flex items-center justify-between bg-white/20 rounded-lg p-3">
-          <div className="flex items-center gap-2">
-            <Wind className="w-5 h-5" />
-            <span>Wind Speed</span>
+          <div className="text-blue-400">
+            {getWeatherIcon(weather.description)}
           </div>
-          <span className="font-semibold">{weather.wind_speed} m/s</span>
         </div>
-      </div>
 
-      {/* Disease Risk */}
-      <div className="mt-6 p-4 bg-white/20 rounded-lg">
-        <p className="text-sm font-semibold mb-2">Disease Risk Level:</p>
-        <div className="flex gap-2">
-          {weather.humidity > 80 && (
-            <span className="px-3 py-1 bg-red-500 rounded-full text-xs font-semibold">High Risk</span>
-          )}
-          {weather.humidity > 60 && weather.humidity <= 80 && (
-            <span className="px-3 py-1 bg-yellow-500 rounded-full text-xs font-semibold">Medium Risk</span>
-          )}
-          {weather.humidity <= 60 && (
-            <span className="px-3 py-1 bg-green-500 rounded-full text-xs font-semibold">Low Risk</span>
-          )}
+        {/* Weather Details */}
+        <div className="grid grid-cols-2 gap-4">
+          <motion.div
+            className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100"
+            whileHover={{ scale: 1.05 }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Droplets className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-semibold text-gray-700">Humidity</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">{weather.humidity}%</p>
+          </motion.div>
+
+          <motion.div
+            className="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl p-4 border border-cyan-100"
+            whileHover={{ scale: 1.05 }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Wind className="w-5 h-5 text-cyan-600" />
+              <span className="text-sm font-semibold text-gray-700">Wind Speed</span>
+            </div>
+            <p className="text-2xl font-bold text-cyan-600">{weather.wind_speed} m/s</p>
+          </motion.div>
         </div>
+
+        {/* Disease Risk */}
+        <motion.div
+          className={`${risk.bg} rounded-xl p-4 border-2 border-current ${risk.text}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <p className="text-sm font-semibold mb-2">Disease Risk Level</p>
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full bg-gradient-to-r ${risk.color}`}></div>
+            <span className="font-bold text-lg">{risk.level}</span>
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   )
