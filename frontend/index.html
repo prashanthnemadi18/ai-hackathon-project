@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroGuard AI - Crop Disease Detection</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌾 AgroGuard AI</h1>
+            <p>Smart Crop Disease Detection System</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-box" id="uploadBox">
+                    <div class="upload-icon">📸</div>
+                    <h2>Upload Crop Image</h2>
+                    <p>Click or drag and drop an image</p>
+                    <input type="file" id="imageInput" accept="image/*" hidden>
+                    <button class="btn-primary" onclick="document.getElementById('imageInput').click()">
+                        Choose Image
+                    </button>
+                </div>
+
+                <div class="preview-section" id="previewSection" style="display: none;">
+                    <img id="imagePreview" alt="Preview">
+                    <button class="btn-secondary" onclick="resetUpload()">Change Image</button>
+                </div>
+            </div>
+
+            <div class="location-section">
+                <label for="cityInput">📍 Your Location (for weather data)</label>
+                <input type="text" id="cityInput" placeholder="Enter city name" value="New Delhi">
+            </div>
+
+            <button class="btn-analyze" id="analyzeBtn" onclick="analyzeCrop()" disabled>
+                Analyze Crop
+            </button>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing your crop image...</p>
+            </div>
+
+            <div class="results" id="results" style="display: none;">
+                <!-- Results will be populated by JavaScript -->
+            </div>
+        </main>
+
+        <footer>
+            <p>Built with ❤️ for farmers | AgroGuard AI © 2024</p>
+        </footer>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
