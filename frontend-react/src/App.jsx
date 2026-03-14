@@ -5,7 +5,10 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import PrivateRoute from './components/PrivateRoute'
 
+console.log('🚀 App.jsx loading...')
+
 function App() {
+  console.log('📱 App component rendering...')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
 
@@ -30,7 +33,7 @@ function App() {
   }
 
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />

@@ -247,7 +247,37 @@ def preprocess_image(img_path):
 
 
 def get_weather(city: str):
-    """Get weather data from Open-Meteo (free, no API key needed)"""
+    """Get weather data from OpenWeatherMap API"""
+    try:
+        if not OPENWEATHER_API_KEY:
+            logger.warning("OpenWeatherMap API key not set, using fallback")
+            return get_weather_fallback(city)
+        
+        # Get weather by city name
+        weather_url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&units=metric&appid={OPENWEATHER_API_KEY}"
+        weather_response = requests.get(weather_url, timeout=5)
+        
+        if weather_response.status_code != 200:
+            logger.warning(f"OpenWeatherMap API error: {weather_response.status_code}")
+            return get_weather_fallback(city)
+        
+        weather_data = weather_response.json()
+        
+        return {
+            "city": f"{weather_data['name']}, {weather_data['sys'].get('country', '')}",
+            "temperature": round(weather_data['main']['temp'], 1),
+            "humidity": weather_data['main']['humidity'],
+            "wind_speed": round(weather_data['wind']['speed'], 1),
+            "description": weather_data['weather'][0]['main'],
+            "icon": weather_data['weather'][0]['icon'],
+        }
+    except Exception as e:
+        logger.error(f"Weather API error: {e}")
+        return get_weather_fallback(city)
+
+
+def get_weather_fallback(city: str):
+    """Fallback weather data from Open-Meteo (free, no API key needed)"""
     try:
         # First, get coordinates from city name
         geocoding_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
@@ -313,7 +343,7 @@ def get_weather(city: str):
             "icon": "01d",
         }
     except Exception as e:
-        logger.error(f"Weather API error: {e}")
+        logger.error(f"Fallback weather API error: {e}")
         return {
             "city": city,
             "temperature": "N/A",
@@ -372,6 +402,23 @@ def generate_weather_advice(weather, disease_label):
 
 
 # API Routes
+@app.route("/", methods=["GET"])
+def index():
+    """Root endpoint - API information"""
+    return jsonify({
+        "message": "🌾 AgroGuard AI Backend API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/api/health",
+            "predict": "/api/predict (POST)",
+            "weather": "/api/weather (GET)"
+        },
+        "model_loaded": model is not None,
+        "classes_available": len(class_names)
+    })
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({
@@ -460,4 +507,5 @@ if __name__ == "__main__":
     logger.info(f"Model loaded: {model is not None}")
     logger.info(f"Classes available: {len(class_names)}")
     # Use production WSGI server in deployment (gunicorn, waitress, etc.)
-    app.run(debug=False, host="0.0.0.0", port=5000, threaded=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host="0.0.0.0", port=port, threaded=True)

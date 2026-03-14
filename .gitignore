@@ -22,6 +22,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # Dataset and model files
 dataset/
 backend/model/

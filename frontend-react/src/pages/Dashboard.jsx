@@ -1,602 +1,472 @@
-import { motion } from 'framer-motion'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, Upload, LogOut, Cloud, Droplets, Wind, Cloud as CloudRain, Download, BarChart3, Leaf, Mic } from 'lucide-react'
-import axios from 'axios'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Upload, Download, LogOut, Activity, Sparkles, Camera, BarChart3, Mic, MapPin, Brain, Zap, TrendingUp, Award, AlertCircle, CheckCircle, Loader, Cloud, Leaf, X, CheckCircle2 } from 'lucide-react'
 import jsPDF from 'jspdf'
-import WeatherCard from '../components/WeatherCard'
+import axios from 'axios'
+import { API_URL } from '../config'
+import CameraCapture from '../components/CameraCapture'
 import PredictionCard from '../components/PredictionCard'
+import WeatherCard from '../components/WeatherCard'
 import AnalyticsChart from '../components/AnalyticsChart'
 import VoiceAssistant from '../components/VoiceAssistant'
 
 export default function Dashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('detect')
-  const [image, setImage] = useState(null)
-  const [prediction, setPrediction] = useState(null)
-  const [weather, setWeather] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [city, setCity] = useState('New Delhi')
-  const [cameraActive, setCameraActive] = useState(false)
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const fileInputRef = useRef(null)
   const navigate = useNavigate()
-
-  // Voice location capture
-  const captureLocationVoice = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition()
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.lang = 'en-US'
-
-      recognition.onstart = () => {
-        console.log('Listening for location...')
-      }
-
-      recognition.onresult = (event) => {
-        let transcript = ''
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript
-        }
-        if (transcript) {
-          setCity(transcript.trim())
-          // Speak confirmation
-          const utterance = new SpeechSynthesisUtterance(`Location set to ${transcript}`)
-          window.speechSynthesis.speak(utterance)
-        }
-      }
-
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error', event.error)
-      }
-
-      recognition.start()
-    }
-  }
-
-  // Auto-detect location on mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords
-          try {
-            // Use reverse geocoding to get city name
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-            )
-            const data = await response.json()
-            const cityName = data.address?.city || data.address?.town || 'Unknown'
-            setCity(cityName)
-          } catch (error) {
-            console.log('Could not get city name, using default')
-          }
-        },
-        (error) => {
-          console.log('Geolocation not available, using default city')
-        }
-      )
-    }
-  }, [])
-
-  // Handle image upload
-  const handleImageUpload = async (file) => {
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setImage(e.target.result)
-    }
-    reader.readAsDataURL(file)
-
-    // Send to backend
-    await predictDisease(file)
-  }
-
-  // Predict disease
-  const predictDisease = async (file) => {
-    setLoading(true)
-    try {
-      const formData = new FormData()
-      formData.append('image', file)
-      formData.append('city', city)
-
-      // Get API URL from environment or use default
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-      const endpoint = `${apiUrl}/api/predict`
-
-      const response = await axios.post(endpoint, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000
-      })
-
-      setPrediction(response.data)
-      setWeather(response.data.weather)
-    } catch (error) {
-      console.error('Prediction error:', error)
-      alert('Error connecting to backend. Please check:\n1. Backend is deployed and running\n2. API URL is correct\n3. CORS is enabled')
-    }
-    setLoading(false)
-  }
-
-  // Start camera
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setCameraActive(true)
-      }
-    } catch (error) {
-      alert('Camera access denied')
-    }
-  }
-
-  // Capture from camera
-  const capturePhoto = () => {
-    if (canvasRef.current && videoRef.current) {
-      const context = canvasRef.current.getContext('2d')
-      context.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height)
-      canvasRef.current.toBlob((blob) => {
-        handleImageUpload(blob)
-        stopCamera()
-      })
-    }
-  }
-
-  // Stop camera
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop())
-      setCameraActive(false)
-    }
-  }
-
-  // Generate Professional PDF Report
-  const generatePDF = () => {
-    if (!prediction) return
-
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const pageHeight = doc.internal.pageSize.getHeight()
-    let yPosition = 20
-
-    // Color scheme
-    const primaryColor = [5, 150, 105] // #059669
-    const darkColor = [31, 41, 55] // #1f2937
-    const lightGray = [249, 250, 251] // #f9fafb
-
-    // Header with background
-    doc.setFillColor(...primaryColor)
-    doc.rect(0, 0, pageWidth, 50, 'F')
-    
-    // Logo and title
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(28)
-    doc.setFont(undefined, 'bold')
-    doc.text('AgroGuard AI', 20, 25)
-    doc.setFontSize(10)
-    doc.setFont(undefined, 'normal')
-    doc.text('Smart Crop Disease Detection Report', 20, 35)
-    
-    // Report date
-    doc.setFontSize(9)
-    doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - 20, 25, { align: 'right' })
-
-    yPosition = 60
-
-    // Disease Detection Section
-    doc.setTextColor(...darkColor)
-    doc.setFontSize(14)
-    doc.setFont(undefined, 'bold')
-    doc.text('Disease Detection Results', 20, yPosition)
-    yPosition += 10
-
-    // Background for results
-    doc.setFillColor(...lightGray)
-    doc.rect(15, yPosition - 5, pageWidth - 30, 35, 'F')
-
-    doc.setFontSize(11)
-    doc.setFont(undefined, 'normal')
-    doc.setTextColor(...darkColor)
-    
-    doc.text(`Disease: ${prediction.disease.replace(/_/g, ' ')}`, 20, yPosition)
-    yPosition += 7
-    doc.text(`Confidence: ${prediction.confidence}%`, 20, yPosition)
-    yPosition += 7
-    doc.text(`Severity: ${prediction.severity}`, 20, yPosition)
-    yPosition += 7
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, yPosition)
-    
-    yPosition += 15
-
-    // Description Section
-    doc.setFont(undefined, 'bold')
-    doc.setFontSize(12)
-    doc.text('Description', 20, yPosition)
-    yPosition += 6
-
-    doc.setFont(undefined, 'normal')
-    doc.setFontSize(10)
-    const descLines = doc.splitTextToSize(prediction.description, pageWidth - 40)
-    doc.text(descLines, 20, yPosition)
-    yPosition += descLines.length * 5 + 5
-
-    // Symptoms Section
-    doc.setFont(undefined, 'bold')
-    doc.setFontSize(12)
-    doc.text('Symptoms', 20, yPosition)
-    yPosition += 6
-
-    doc.setFont(undefined, 'normal')
-    doc.setFontSize(10)
-    const symptomLines = doc.splitTextToSize(prediction.symptoms, pageWidth - 40)
-    doc.text(symptomLines, 20, yPosition)
-    yPosition += symptomLines.length * 5 + 8
-
-    // Treatment Section
-    doc.setFont(undefined, 'bold')
-    doc.setFontSize(12)
-    doc.text('Treatment Recommendations', 20, yPosition)
-    yPosition += 6
-
-    doc.setFont(undefined, 'normal')
-    doc.setFontSize(10)
-    prediction.treatment.forEach((treatment, idx) => {
-      const treatmentLines = doc.splitTextToSize(`${idx + 1}. ${treatment}`, pageWidth - 40)
-      doc.text(treatmentLines, 20, yPosition)
-      yPosition += treatmentLines.length * 5
-    })
-
-    yPosition += 5
-
-    // Weather Information Section
-    if (weather && weather.city) {
-      doc.setFont(undefined, 'bold')
-      doc.setFontSize(12)
-      doc.text('Weather Information', 20, yPosition)
-      yPosition += 6
-
-      // Weather background
-      doc.setFillColor(...lightGray)
-      doc.rect(15, yPosition - 5, pageWidth - 30, 30, 'F')
-
-      doc.setFont(undefined, 'normal')
-      doc.setFontSize(10)
-      doc.text(`Location: ${weather.city}`, 20, yPosition)
-      yPosition += 6
-      doc.text(`Temperature: ${weather.temperature}°C`, 20, yPosition)
-      yPosition += 6
-      doc.text(`Humidity: ${weather.humidity}%`, 20, yPosition)
-      yPosition += 6
-      doc.text(`Wind Speed: ${weather.wind_speed} m/s`, 20, yPosition)
-      yPosition += 6
-      doc.text(`Condition: ${weather.description}`, 20, yPosition)
-    }
-
-    yPosition += 15
-
-    // Disease Risk Assessment
-    doc.setFont(undefined, 'bold')
-    doc.setFontSize(12)
-    doc.text('Disease Risk Assessment', 20, yPosition)
-    yPosition += 6
-
-    doc.setFont(undefined, 'normal')
-    doc.setFontSize(10)
-    
-    let riskLevel = 'Low'
-    let riskColor = [34, 197, 94] // green
-    
-    if (weather && weather.humidity > 80) {
-      riskLevel = 'High'
-      riskColor = [239, 68, 68] // red
-    } else if (weather && weather.humidity > 60) {
-      riskLevel = 'Medium'
-      riskColor = [251, 146, 60] // orange
-    }
-
-    doc.setFillColor(...riskColor)
-    doc.rect(15, yPosition - 5, pageWidth - 30, 10, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFont(undefined, 'bold')
-    doc.text(`Risk Level: ${riskLevel}`, 20, yPosition + 2)
-
-    yPosition += 20
-
-    // Footer
-    doc.setTextColor(150, 150, 150)
-    doc.setFontSize(8)
-    doc.text('This report is generated by AgroGuard AI. Please consult with agricultural experts for critical decisions.', 20, pageHeight - 15, { maxWidth: pageWidth - 40 })
-
-    // Save PDF
-    doc.save(`AgroGuard_Report_${new Date().toISOString().split('T')[0]}.pdf`)
-  }
+  const fileInputRef = useRef(null)
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [prediction, setPrediction] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [weather, setWeather] = useState(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [activeTab, setActiveTab] = useState('analyze')
+  const [showCamera, setShowCamera] = useState(false)
+  const [showVoice, setShowVoice] = useState(false)
+  const [location, setLocation] = useState('New Delhi')
+  const [showLocationInput, setShowLocationInput] = useState(false)
 
   const handleLogout = () => {
     onLogout()
     navigate('/')
   }
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setSelectedImage(event.target.result)
+        setPrediction(null)
+        setError(null)
+        setShowCamera(false)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCameraCapture = (blob) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setSelectedImage(event.target.result)
+      setPrediction(null)
+      setError(null)
+    }
+    reader.readAsDataURL(blob)
+  }
+
+  const handleAnalyze = async () => {
+    if (!selectedImage) {
+      setError('Please select an image first')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    setUploadProgress(0)
+    try {
+      const formData = new FormData()
+      const canvas = document.createElement('canvas')
+      const img = new Image()
+      img.onload = async () => {
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        canvas.toBlob(async (blob) => {
+          formData.append('image', blob, 'image.jpg')
+          formData.append('city', location)
+          try {
+            const response = await axios.post(`${API_URL}/api/predict`, formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+              onUploadProgress: (progressEvent) => {
+                const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                setUploadProgress(progress)
+              }
+            })
+            const treatmentArray = Array.isArray(response.data.treatment) ? response.data.treatment : [response.data.treatment]
+            setPrediction({
+              disease: response.data.disease,
+              confidence: Math.round(response.data.confidence),
+              symptoms: response.data.symptoms || 'No symptoms information available',
+              treatment: treatmentArray,
+              severity: response.data.severity || 'Unknown',
+              description: response.data.description || 'No description available',
+              timestamp: new Date().toLocaleString()
+            })
+            if (response.data.weather && !response.data.weather.error) {
+              setWeather({
+                temperature: response.data.weather.temperature,
+                humidity: response.data.weather.humidity,
+                description: response.data.weather.condition || 'Clear',
+                city: location,
+                wind_speed: response.data.weather.wind_speed || 0
+              })
+            }
+          } catch (err) {
+            console.error('Prediction error:', err)
+            setError(err.response?.data?.error || 'Analysis failed. Please try again.')
+          } finally {
+            setLoading(false)
+            setUploadProgress(0)
+          }
+        })
+      }
+      img.src = selectedImage
+    } catch (err) {
+      setError('Failed to process image')
+      setLoading(false)
+    }
+  }
+
+  const generatePDF = () => {
+    if (!prediction) return
+    const pdf = new jsPDF()
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    let yPosition = 20
+    pdf.setFontSize(20)
+    pdf.setTextColor(16, 185, 129)
+    pdf.text('AgroGuard AI - Disease Report', pageWidth / 2, yPosition, { align: 'center' })
+    yPosition += 15
+    pdf.setFontSize(12)
+    pdf.setTextColor(0, 0, 0)
+    pdf.text(`Disease: ${prediction.disease}`, 20, yPosition)
+    yPosition += 8
+    pdf.text(`Confidence: ${Math.round(prediction.confidence)}%`, 20, yPosition)
+    yPosition += 8
+    pdf.text(`Severity: ${prediction.severity}`, 20, yPosition)
+    yPosition += 8
+    pdf.text(`Location: ${location}`, 20, yPosition)
+    yPosition += 8
+    pdf.text(`Date: ${prediction.timestamp}`, 20, yPosition)
+    yPosition += 15
+    pdf.setFontSize(14)
+    pdf.setTextColor(16, 185, 129)
+    pdf.text('Description:', 20, yPosition)
+    yPosition += 8
+    pdf.setFontSize(11)
+    pdf.setTextColor(0, 0, 0)
+    const descLines = pdf.splitTextToSize(prediction.description, pageWidth - 40)
+    pdf.text(descLines, 20, yPosition)
+    yPosition += descLines.length * 6 + 10
+    pdf.setFontSize(14)
+    pdf.setTextColor(16, 185, 129)
+    pdf.text('Symptoms:', 20, yPosition)
+    yPosition += 8
+    pdf.setFontSize(11)
+    pdf.setTextColor(0, 0, 0)
+    const sympLines = pdf.splitTextToSize(prediction.symptoms, pageWidth - 40)
+    pdf.text(sympLines, 20, yPosition)
+    yPosition += sympLines.length * 6 + 10
+    pdf.setFontSize(14)
+    pdf.setTextColor(16, 185, 129)
+    pdf.text('Treatment:', 20, yPosition)
+    yPosition += 8
+    pdf.setFontSize(11)
+    pdf.setTextColor(0, 0, 0)
+    prediction.treatment.forEach((t, i) => {
+      const lines = pdf.splitTextToSize(`${i + 1}. ${t}`, pageWidth - 40)
+      pdf.text(lines, 20, yPosition)
+      yPosition += lines.length * 6
+    })
+    pdf.save(`AgroGuard_Report_${Date.now()}.pdf`)
+  }
+
+  const tabs = [
+    { id: 'analyze', label: 'AI Analysis', icon: Brain },
+    { id: 'weather', label: 'Environment', icon: Cloud },
+    { id: 'analytics', label: 'Performance', icon: TrendingUp },
+    { id: 'voice', label: 'Assistant', icon: Mic }
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
-      {/* Header */}
-      <motion.header 
-        className="bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg sticky top-0 z-40"
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-[#f8fafc] flex overflow-hidden selection:bg-primary/20">
+      {/* Sidebar */}
+      <aside className="w-72 bg-white border-r border-gray-100 flex flex-col z-50">
+        <div className="p-8">
           <motion.div 
-            className="flex items-center gap-3"
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.02 }}
+            className="flex items-center gap-3 mb-12"
           >
-            <div className="p-2 bg-white/20 rounded-lg">
-              <Leaf className="w-8 h-8 text-white" />
+            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Leaf className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">AgroGuard AI</h1>
-              <p className="text-green-100 text-xs">Smart Crop Disease Detection</p>
-            </div>
+            <span className="text-xl font-black tracking-tight text-gray-900">AgroGuard</span>
           </motion.div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-white font-semibold">{user?.name}</p>
-              <p className="text-green-100 text-xs">Farmer Account</p>
+
+          <nav className="space-y-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                  activeTab === tab.id 
+                    ? 'bg-emerald-50 text-emerald-600 shadow-sm' 
+                    : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                }`}
+              >
+                <tab.icon className={`w-5 h-5 transition-transform duration-300 ${
+                  activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'
+                }`} />
+                <span className="font-bold text-sm">{tab.label}</span>
+                {activeTab === tab.id && (
+                  <motion.div 
+                    layoutId="activeTab"
+                    className="ml-auto w-1.5 h-1.5 bg-emerald-600 rounded-full"
+                  />
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="mt-auto p-8">
+          <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-gray-200 overflow-hidden shadow-sm">
+                <img src={`https://ui-avatars.com/api/?name=${user?.name || user?.username || 'User'}&background=10b981&color=fff`} alt="Avatar" />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="font-bold text-sm text-gray-900 truncate">{user?.name || user?.username || 'Farmer'}</p>
+                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Premium Plan</p>
+              </div>
             </div>
-            <motion.button
+            <button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition font-semibold border border-white/30"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="w-full py-3 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-bold hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               <LogOut className="w-4 h-4" />
-              Logout
-            </motion.button>
+              Sign Out
+            </button>
           </div>
         </div>
-      </motion.header>
+      </aside>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <motion.div 
-          className="flex gap-4 mb-8 bg-white rounded-xl shadow-soft p-2 border border-gray-100"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          {[
-            { id: 'detect', label: 'Disease Detection', icon: <Camera className="w-4 h-4" /> },
-            { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> }
-          ].map(tab => (
-            <motion.button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition flex-1 sm:flex-none ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Top Header */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-10 py-6 flex justify-between items-center sticky top-0 z-40">
+          <div className="flex items-center gap-4">
+            <div className="w-1.5 h-8 bg-emerald-600 rounded-full" />
+            <h1 className="text-2xl font-black text-gray-900 capitalize">
+              {tabs.find(t => t.id === activeTab)?.label}
+            </h1>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="bg-transparent text-sm font-bold text-gray-600 outline-none w-24"
+              />
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable Area */}
+        <div className="flex-1 overflow-y-auto p-10">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="max-w-6xl mx-auto"
             >
-              {tab.icon}
-              {tab.label}
-            </motion.button>
-          ))}
-        </motion.div>
-
-        {/* Detection Tab */}
-        {activeTab === 'detect' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="grid lg:grid-cols-3 gap-8"
-          >
-            {/* Upload Section */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Image Upload Card */}
-              <motion.div
-                className="bg-white rounded-2xl shadow-soft hover:shadow-lg transition border border-gray-100 overflow-hidden"
-                whileHover={{ y: -4 }}
-              >
-                {/* Header */}
-                <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
-                  <h2 className="text-2xl font-bold flex items-center gap-2">
-                    <Camera className="w-6 h-6" />
-                    Upload Crop Image
-                  </h2>
-                </div>
-
-                {/* Content */}
-                <div className="p-8 space-y-6">
-                  {/* Upload Area */}
-                  <motion.div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-green-300 rounded-xl p-12 text-center cursor-pointer hover:border-green-500 hover:bg-green-50 transition bg-gradient-to-br from-green-50 to-emerald-50"
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <motion.div
-                      animate={{ y: [0, -10, 0] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                    >
-                      <Upload className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                    </motion.div>
-                    <p className="text-gray-700 font-semibold mb-2 text-lg">Click to upload or drag and drop</p>
-                    <p className="text-gray-600 text-sm">PNG, JPG, JPEG, WEBP (max 16MB)</p>
-                  </motion.div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                    className="hidden"
-                  />
-
-                  {/* Camera Button */}
-                  <motion.button
-                    onClick={startCamera}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:shadow-lg transition font-semibold"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Camera className="w-5 h-5" />
-                    Use Camera
-                  </motion.button>
-
-                  {/* Camera View */}
-                  {cameraActive && (
-                    <motion.div
-                      className="space-y-4"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        className="w-full rounded-lg border-2 border-green-300"
-                      />
-                      <canvas ref={canvasRef} className="hidden" width={640} height={480} />
-                      <div className="flex gap-4">
-                        <motion.button
-                          onClick={capturePhoto}
-                          className="flex-1 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:shadow-lg transition font-semibold"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          Capture
-                        </motion.button>
-                        <motion.button
-                          onClick={stopCamera}
-                          className="flex-1 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-semibold"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          Cancel
-                        </motion.button>
+              {activeTab === 'analyze' && (
+                <div className="space-y-10">
+                  {/* Analysis Header */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2">
+                      <div className="modern-card p-10 bg-white relative overflow-hidden min-h-[400px] flex flex-col items-center justify-center text-center border-dashed border-2 border-gray-200 hover:border-emerald-600/30 transition-all">
+                        {!selectedImage ? (
+                          <div className="space-y-6">
+                            <div className="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
+                              <Upload className="w-10 h-10 text-emerald-600" />
+                            </div>
+                            <h2 className="text-3xl font-black text-gray-900">Upload Crop Image</h2>
+                            <p className="text-gray-400 max-w-sm mx-auto">
+                              Drag and drop your crop photo here or use the buttons below to start the AI analysis.
+                            </p>
+                            <div className="flex flex-wrap gap-4 justify-center mt-10">
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-8 py-4 bg-emerald-600 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all flex items-center gap-3"
+                              >
+                                <Upload className="w-5 h-5" />
+                                Browse Files
+                              </button>
+                              <button
+                                onClick={() => setShowCamera(true)}
+                                className="px-8 py-4 bg-gray-900 text-white font-bold rounded-2xl shadow-lg transition-all flex items-center gap-3"
+                              >
+                                <Camera className="w-5 h-5" />
+                                Open Camera
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full relative group">
+                            <img
+                              src={selectedImage}
+                              alt="Selected crop"
+                              className="w-full h-[400px] object-cover rounded-3xl shadow-2xl"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-3xl backdrop-blur-sm">
+                              <button
+                                onClick={() => setSelectedImage(null)}
+                                className="p-4 bg-white text-red-500 rounded-2xl font-bold shadow-xl hover:scale-110 transition-transform"
+                              >
+                                <X className="w-6 h-6" />
+                              </button>
+                              <button
+                                onClick={handleAnalyze}
+                                disabled={loading}
+                                className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl hover:scale-110 transition-transform disabled:opacity-50 flex items-center gap-3"
+                              >
+                                {loading ? <Loader className="w-6 h-6 animate-spin" /> : <Zap className="w-6 h-6" />}
+                                Analyze Now
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleImageSelect}
+                          accept="image/*"
+                          className="hidden"
+                        />
                       </div>
-                    </motion.div>
-                  )}
+                    </div>
 
-                  {/* Preview */}
-                  {image && !cameraActive && (
-                    <motion.div
-                      className="rounded-lg overflow-hidden border-2 border-green-300"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <img src={image} alt="Preview" className="w-full" />
-                    </motion.div>
-                  )}
-                </div>
-              </motion.div>
+                    <div className="space-y-6">
+                      <div className="modern-card p-8 bg-gradient-to-br from-emerald-600 to-emerald-800 text-white">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="p-2 bg-white/20 rounded-lg">
+                            <Sparkles className="w-5 h-5" />
+                          </div>
+                          <h3 className="font-bold">AI Status</h3>
+                        </div>
+                        <p className="text-white/80 text-sm mb-6 leading-relaxed">
+                          Our neural network is ready to analyze your crops with 95% accuracy.
+                        </p>
+                        <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-white"
+                            initial={{ width: 0 }}
+                            animate={{ width: loading ? `${uploadProgress}%` : '100%' }}
+                          />
+                        </div>
+                        <div className="flex justify-between mt-3 text-[10px] font-bold uppercase tracking-wider">
+                          <span>System Ready</span>
+                          <span>{loading ? 'Processing...' : 'Online'}</span>
+                        </div>
+                      </div>
 
-              {/* Location Input */}
-              <motion.div className="bg-white rounded-2xl shadow-soft hover:shadow-lg transition border border-gray-100 overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
-                  <h3 className="text-lg font-bold">Location Settings</h3>
-                </div>
-
-                {/* Content */}
-                <div className="p-6">
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Enter or speak your location</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Enter city name or use voice"
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                    />
-                    <motion.button
-                      onClick={() => captureLocationVoice()}
-                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition flex items-center gap-2 font-semibold"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Mic className="w-5 h-5" />
-                      Voice
-                    </motion.button>
+                      <div className="modern-card p-8 bg-white border border-gray-100">
+                        <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-3">
+                          <AlertCircle className="w-5 h-5 text-amber-500" />
+                          Status Check
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors border border-transparent">
+                            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                              <Activity size={24} />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-gray-800">AI Model</p>
+                              <p className="text-[10px] text-gray-400">Healthy & Active</p>
+                            </div>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-600 mt-3">📍 Auto-detected from your device location</p>
+
+                  {/* Results Section */}
+                  {prediction && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-8"
+                    >
+                      <PredictionCard prediction={prediction} weather={weather} />
+                      <button
+                        onClick={generatePDF}
+                        className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg flex items-center justify-center gap-3 hover:bg-blue-700 transition-all"
+                      >
+                        <Download className="w-5 h-5" />
+                        Download Analysis Report
+                      </button>
+                    </motion.div>
+                  )}
                 </div>
-              </motion.div>
-            </div>
-
-            {/* Results Section */}
-            <div className="space-y-6">
-              {/* Prediction Result */}
-              {prediction && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                >
-                  <PredictionCard prediction={prediction} />
-                </motion.div>
               )}
 
-              {/* Weather Card */}
-              {weather && weather.city && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                >
-                  <WeatherCard weather={weather} />
-                </motion.div>
+              {activeTab === 'weather' && weather && (
+                <div className="max-w-2xl mx-auto">
+                  <WeatherCard weather={weather} location={location} />
+                </div>
               )}
 
-              {/* PDF Download */}
-              {prediction && (
-                <motion.button
-                  onClick={generatePDF}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:shadow-lg transition font-semibold border border-green-700"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Download className="w-5 h-5" />
-                  Download Report
-                </motion.button>
+              {activeTab === 'analytics' && (
+                <div className="space-y-8">
+                  <AnalyticsChart />
+                </div>
               )}
 
-              {/* Loading */}
-              {loading && (
-                <motion.div
-                  className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-6 text-center border border-blue-200"
-                  animate={{ opacity: [0.5, 1, 0.5] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                >
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    className="inline-block mb-3"
-                  >
-                    <Camera className="w-8 h-8 text-blue-600" />
-                  </motion.div>
-                  <p className="text-blue-900 font-semibold">Analyzing image...</p>
-                  <p className="text-blue-700 text-sm mt-1">Please wait while AI processes your crop image</p>
-                </motion.div>
+              {activeTab === 'voice' && (
+                <div className="max-w-2xl mx-auto bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
+                  <VoiceAssistant 
+                    prediction={prediction} 
+                    weather={weather} 
+                    onClose={() => setActiveTab('analyze')} 
+                  />
+                </div>
               )}
-            </div>
-          </motion.div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </main>
+
+      {/* Camera Modal */}
+      <AnimatePresence>
+        {showCamera && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCamera(false)}
+              className="absolute inset-0 bg-gray-900/80 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-black text-gray-900">Live Camera</h2>
+                  <button onClick={() => setShowCamera(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+                <CameraCapture onCapture={(blob) => {
+                  handleCameraCapture(blob)
+                  setShowCamera(false)
+                }} onClose={() => setShowCamera(false)} />
+              </div>
+            </motion.div>
+          </div>
         )}
-
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <AnalyticsChart />
-          </motion.div>
-        )}
-      </div>
-
-      {/* Voice Assistant */}
-      {prediction && <VoiceAssistant prediction={prediction} weather={weather} />}
+      </AnimatePresence>
     </div>
   )
 }

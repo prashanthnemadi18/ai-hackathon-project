@@ -7,7 +7,8 @@ export default function ProjectVoiceGuide() {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [messages, setMessages] = useState([])
-  const [showGuide, setShowGuide] = useState(true)
+  const [showGuide, setShowGuide] = useState(true) // Always show by default
+  const [voiceGender, setVoiceGender] = useState('female') // 'female' or 'male'
   const recognitionRef = useRef(null)
   const synthRef = useRef(window.speechSynthesis)
 
@@ -31,7 +32,7 @@ export default function ProjectVoiceGuide() {
     help: "You can ask me about: How to login, How to upload images, What diseases we detect, How weather affects crops, Treatment recommendations, How to download reports, or any other questions about the app."
   }
 
-  // Initialize speech recognition
+  // Initialize speech recognition and synthesis
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (SpeechRecognition) {
@@ -55,6 +56,16 @@ export default function ProjectVoiceGuide() {
         setTranscript(interim)
       }
     }
+
+    // Load voices when they're available
+    const loadVoices = () => {
+      if (synthRef.current.getVoices().length > 0) {
+        console.log('Voices loaded:', synthRef.current.getVoices().length)
+      }
+    }
+
+    synthRef.current.onvoiceschanged = loadVoices
+    loadVoices()
 
     // Auto-play welcome message
     setTimeout(() => {
@@ -98,19 +109,69 @@ export default function ProjectVoiceGuide() {
     setMessages(prev => [...prev, { sender, text, id: Date.now() }])
   }
 
-  // Text to speech
+  // Text to speech with female voice
   const speakResponse = (text) => {
     if (synthRef.current.speaking) {
       synthRef.current.cancel()
     }
 
     const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.85
-    utterance.pitch = 1
+    utterance.rate = 0.9
+    utterance.pitch = voiceGender === 'female' ? 1.5 : 0.7
     utterance.volume = 1
+
+    // Get available voices
+    const voices = synthRef.current.getVoices()
+    console.log('Available voices:', voices.length, voiceGender)
+
+    if (voices.length > 0) {
+      if (voiceGender === 'female') {
+        // Try to find female voice
+        let femaleVoice = voices.find(v => 
+          v.name.toLowerCase().includes('female') || 
+          v.name.toLowerCase().includes('woman') ||
+          v.name.toLowerCase().includes('samantha') ||
+          v.name.toLowerCase().includes('victoria') ||
+          v.name.toLowerCase().includes('moira')
+        )
+        
+        // If no female voice found, use any voice with higher index
+        if (!femaleVoice && voices.length > 1) {
+          femaleVoice = voices[1]
+        }
+        
+        if (femaleVoice) {
+          utterance.voice = femaleVoice
+          console.log('Using female voice:', femaleVoice.name)
+        }
+      } else {
+        // Try to find male voice
+        let maleVoice = voices.find(v => 
+          v.name.toLowerCase().includes('male') || 
+          v.name.toLowerCase().includes('man') ||
+          v.name.toLowerCase().includes('david') ||
+          v.name.toLowerCase().includes('alex') ||
+          v.name.toLowerCase().includes('google uk')
+        )
+        
+        // If no male voice found, use first voice
+        if (!maleVoice && voices.length > 0) {
+          maleVoice = voices[0]
+        }
+        
+        if (maleVoice) {
+          utterance.voice = maleVoice
+          console.log('Using male voice:', maleVoice.name)
+        }
+      }
+    }
 
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event.error)
+      setIsSpeaking(false)
+    }
 
     synthRef.current.speak(utterance)
   }
@@ -140,20 +201,20 @@ export default function ProjectVoiceGuide() {
     return (
       <motion.button
         onClick={() => setShowGuide(true)}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-secondary transition z-40"
+        className="fixed bottom-6 left-6 w-16 h-16 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition z-40"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
       >
-        <HelpCircle className="w-8 h-8" />
+        <Mic className="w-8 h-8" />
       </motion.button>
     )
   }
 
   return (
     <motion.div
-      className="fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden z-50"
-      initial={{ opacity: 0, scale: 0.8, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      className="fixed bottom-6 left-6 w-96 max-h-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-40"
+      initial={{ opacity: 0, scale: 0.8, y: 20, x: -100 }}
+      animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
       transition={{ duration: 0.3 }}
     >
       {/* Header */}
@@ -173,7 +234,7 @@ export default function ProjectVoiceGuide() {
       </div>
 
       {/* Chat Area */}
-      <div className="h-64 overflow-y-auto p-4 space-y-3 bg-light">
+      <div className="h-48 overflow-y-auto p-4 space-y-3 bg-gray-50 border-b border-gray-200">
         {messages.map((msg) => (
           <motion.div
             key={msg.id}
@@ -252,8 +313,32 @@ export default function ProjectVoiceGuide() {
           </button>
         </div>
 
+        {/* Voice Gender Toggle */}
+        <div className="flex gap-2 border-t border-gray-200 pt-3">
+          <button
+            onClick={() => setVoiceGender('female')}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition ${
+              voiceGender === 'female'
+                ? 'bg-pink-500 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            👩 Female
+          </button>
+          <button
+            onClick={() => setVoiceGender('male')}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition ${
+              voiceGender === 'male'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            👨 Male
+          </button>
+        </div>
+
         {/* Status */}
-        <div className="text-xs text-gray-500 text-center">
+        <div className="text-xs text-gray-500 text-center pt-2">
           {isListening && '🎤 Listening...'}
           {isSpeaking && '🔊 Speaking...'}
           {!isListening && !isSpeaking && '✓ Ready'}
